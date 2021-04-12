@@ -27,7 +27,7 @@ function asyncReducer(state, action) {
   }
 }
 
-function useAsync (asyncCallback, initialState, dependencies) {
+function useAsync (initialState) {
   const [state, dispatch] = React.useReducer(asyncReducer, {
     status: 'idle',
     data: null,
@@ -35,8 +35,10 @@ function useAsync (asyncCallback, initialState, dependencies) {
     ...initialState
   })
 
-  React.useEffect(() => {
-    const promise = asyncCallback()
+  // We do provide the memoized version of the function we passed in
+  // Doing that, we will keep the useCallback in the hook and make the 
+  // job of people who use hooks easier
+  const run = React.useCallback((promise) => {
     if (!promise) {
       return
     }
@@ -49,24 +51,26 @@ function useAsync (asyncCallback, initialState, dependencies) {
         dispatch({type: 'rejected', error})
       }
     )
-  }, dependencies)
+  }, [])
 
-  return state
+  return {
+    ...state,
+    run
+  }
 }
 
 function PokemonInfo({pokemonName}) {
-  const state = useAsync(
-    () => {
-      if (!pokemonName) {
-        return
-      }
-      return fetchPokemon(pokemonName)
-    },
+
+  const {data, status, error, run} = useAsync(
     {status: pokemonName ? 'pending' : 'idle'},
-    [pokemonName],
   )
 
-  const {data, status, error} = state
+  React.useEffect(() => {
+    if (!pokemonName) {
+      return
+    }
+    run(fetchPokemon(pokemonName))
+  }, [pokemonName, run])
 
   if (status === 'idle' || !pokemonName) {
     return 'Submit a pokemon'
