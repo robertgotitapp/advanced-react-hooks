@@ -27,13 +27,34 @@ function asyncReducer(state, action) {
   }
 }
 
+function useSafeDispatch (unsafeDispatch) {
+  const mountedRef = React.useRef(false)
+
+  // LayoutEffect run before the component actual renders
+  React.useLayoutEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const safeDispatch = React.useCallback((...args) => {
+    mountedRef.current && unsafeDispatch(...args)
+  }, [unsafeDispatch])
+
+  return safeDispatch
+}
+
 function useAsync (initialState) {
-  const [state, dispatch] = React.useReducer(asyncReducer, {
+  const [state, unsafeDispatch] = React.useReducer(asyncReducer, {
     status: 'idle',
     data: null,
     error: null,
     ...initialState
   })
+
+  const dispatch = useSafeDispatch(unsafeDispatch)
 
   // We do provide the memoized version of the function we passed in
   // Doing that, we will keep the useCallback in the hook and make the 
@@ -44,14 +65,14 @@ function useAsync (initialState) {
     }
     dispatch({type: 'pending'})
     promise.then(
-      data => {
-        dispatch({type: 'resolved', data})
-      },
-      error => {
-        dispatch({type: 'rejected', error})
-      }
+        data => {
+          dispatch({type: 'resolved', data})
+        },
+        error => {
+          dispatch({type: 'rejected', error})
+        }
     )
-  }, [])
+  }, [dispatch])
 
   return {
     ...state,
@@ -60,9 +81,8 @@ function useAsync (initialState) {
 }
 
 function PokemonInfo({pokemonName}) {
-
   const {data, status, error, run} = useAsync(
-    {status: pokemonName ? 'pending' : 'idle'},
+    {status: pokemonName ? 'pending' : 'idle'}
   )
 
   React.useEffect(() => {
